@@ -1,0 +1,144 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'com.gradleup.shadow:shadow-gradle-plugin:9.4.1'
+    }
+}
+
+plugins {
+    id 'fabric-loom' version '1.15-SNAPSHOT'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '9.4.1'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+project.ext.lwjglVersion = "3.3.3"
+project.ext.lwjglNatives = "natives-windows"
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    // Add repositories to retrieve artifacts from in here.
+    // You should only use this when depending on other mods because
+    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
+    // for more information about repositories.
+
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    // To change the versions see the gradle.properties file
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
+
+    implementation "org.lwjgl:lwjgl-shaderc"
+    implementation "org.lwjgl:lwjgl-vulkan"
+    implementation "org.lwjgl:lwjgl-vma"
+    implementation "org.lwjgl:lwjgl::$lwjglNatives"
+    implementation "org.lwjgl:lwjgl-shaderc::$lwjglNatives"
+    implementation "org.lwjgl:lwjgl-vma::$lwjglNatives"
+    implementation "com.github.boredhuman:JavaSpirv:969d33a396"
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/tinyvk.classtweaker")
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+    filteringCharset "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": project.minecraft_version,
+                "loader_version": project.loader_version
+    }
+}
+
+def targetJavaVersion = 21
+tasks.withType(JavaCompile).configureEach {
+    // ensure that the encoding is set to UTF-8, no matter what the system default is
+    // this fixes some edge cases with special characters not displaying correctly
+    // see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
+    // If Javadoc is generated, this must be specified in that task too.
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+    // if it is present.
+    // If you remove this line, sources will not be generated.
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+// configure the maven publication
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+
+    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+    repositories {
+        // Add repositories to publish to here.
+        // Notice: This block does NOT have the same function as the block in the top level.
+        // The repositories here will be used for publishing your artifact, not for
+        // retrieving dependencies.
+    }
+}
+
+remapJar {
+    dependsOn(shadowJar)
+    mustRunAfter(shadowJar)
+    inputFile = shadowJar.archiveFile
+}
+
+shadowJar {
+    dependencies {
+        // Base LWJGL modules
+        include(dependency("org.lwjgl:lwjgl-shaderc"))
+        include(dependency("org.lwjgl:lwjgl-vulkan"))
+        include(dependency("org.lwjgl:lwjgl-vma"))
+
+        // The Native JARs (These are separate artifacts in the dependency graph)
+        // Shadow treats the classifier as part of the artifact identity here
+        include(dependency("org.lwjgl:lwjgl::$lwjglNatives"))
+        include(dependency("org.lwjgl:lwjgl-shaderc::$lwjglNatives"))
+        include(dependency("org.lwjgl:lwjgl-vma::$lwjglNatives"))
+
+        // Your specific JavaSpirv dependency
+        include(dependency("com.github.boredhuman:JavaSpirv"))
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'com.gradleup.shadow'

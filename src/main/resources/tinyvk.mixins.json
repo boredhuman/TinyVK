@@ -1,0 +1,30 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "dev.boredhuman.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"plugin": "dev.boredhuman.TinyVKMixinController",
+	"mixins": [
+	],
+	"client": [
+		"GlBufferMixin",
+		"GlCommandEncoderMixin",
+		"GlDeviceMixin",
+		"GlFenceMixin",
+		"GlMappedViewAccessor",
+		"GlRenderPassMixin",
+		"GlSamplerMixin",
+		"GlTextureMixin",
+		"GlTextureViewMixin",
+		"MinecraftMixin",
+		"RenderSystemMixin",
+		"VertexFormatBuilderMixin",
+		"WindowMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

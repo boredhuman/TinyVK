@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "tinyvk",
+	"version": "${version}",
+	"name": "TinyVK",
+	"description": "",
+	"authors": [],
+	"contact": {},
+	"license": "All-Rights-Reserved",
+	"icon": "assets/tinyvk/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"dev.boredhuman.client.TinyVKModInitializer"
+		],
+		"main": [
+			"dev.boredhuman.TinyVK"
+		]
+	},
+	"mixins": [
+		"tinyvk.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=${loader_version}",
+		"minecraft": "${minecraft_version}"
+	},
+	"accessWidener": "tinyvk.classtweaker"
+}

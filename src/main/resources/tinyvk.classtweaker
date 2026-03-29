@@ -1,0 +1,4 @@
+classTweaker v1 named
+accessible class com/mojang/blaze3d/opengl/GlDevice$ShaderCompilationKey
+accessible class com/mojang/blaze3d/opengl/BufferStorage$Immutable
+accessible class com/mojang/blaze3d/opengl/GlRenderPass$TextureViewAndSampler
