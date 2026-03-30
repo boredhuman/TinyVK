@@ -5,9 +5,11 @@ import com.mojang.blaze3d.vertex.VertexFormatElement;
 import dev.boredhuman.SpirvBinary;
 import dev.boredhuman.SpirvBinaryLoader;
 import dev.boredhuman.SpirvBinaryWriter;
+import dev.boredhuman.TinyVK;
 import dev.boredhuman.vulkan.AttributeType;
 import dev.boredhuman.vulkan.VkHelper;
 import dev.boredhuman.vulkan.VulkanDevice;
+import dev.boredhuman.vulkan.VulkanInstance;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
@@ -29,10 +31,13 @@ import spirv.instructions.typedeclaration.OpTypeSampledImage;
 import spirv.instructions.typedeclaration.OpTypeVector;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,6 +56,8 @@ public class ShaderCompiler {
 		Shaderc.shaderc_compile_options_set_auto_bind_uniforms(this.compilerOptions, true);
 		Shaderc.shaderc_compile_options_set_target_env(this.compilerOptions, Shaderc.shaderc_target_env_opengl, Shaderc.shaderc_env_version_opengl_4_5);
 		Shaderc.shaderc_compile_options_set_target_spirv(this.compilerOptions, Shaderc.shaderc_spirv_version_1_0);
+		// Use 4.6 for better compatibility
+		Shaderc.shaderc_compile_options_set_forced_version_profile(this.compilerOptions, 460, Shaderc.shaderc_profile_core);
 	}
 
 	public ProgramData convertProgram(String vertexShader, String vertexLabel, String fragmentShader, String fragmentLabel, VertexFormat vertexFormat) {
@@ -159,6 +166,8 @@ public class ShaderCompiler {
 
 		List<AttributeType> attributeTypeList = new ArrayList<>();
 
+		Set<OpVariable> assignedLocations = Collections.newSetFromMap(new IdentityHashMap<>());
+
 		int location = 0;
 		for (VertexFormatElement element : vertexFormat.getElements()) {
 			String elementName = vertexFormat.getElementName(element);
@@ -182,16 +191,25 @@ public class ShaderCompiler {
 			}
 
 			vertexShaderHelper.setVariableLocation(opVariable, location);
+			assignedLocations.add(opVariable);
 
 			location++;
+		}
+
+		// make sure the auto assigned locations don't get in the way
+		for (OpVariable variable : vertexShaderHelper.inputs.values()) {
+			if (!assignedLocations.contains(variable)) {
+				vertexShaderHelper.setVariableLocation(variable, location);
+				location++;
+			}
 		}
 
 		fragmentShaderHelper.executionModeOriginUpperLeft();
 
 		vertexShaderHelper.fixClipSpaceNew();
 
-		long vertexShadermodule = this.toModule(vertexShaderHelper.getUpdatedBinary());
-		long fragmentShaderModule = this.toModule(fragmentShaderHelper.getUpdatedBinary());
+		long vertexShadermodule = this.toModule(vertexShaderHelper.getUpdatedBinary(), vertexLabel + "-vsh");
+		long fragmentShaderModule = this.toModule(fragmentShaderHelper.getUpdatedBinary(), fragmentLabel + "-fsh");
 
 		VkDevice device = VulkanDevice.getInstance().vkDevice;
 
@@ -221,9 +239,19 @@ public class ShaderCompiler {
 		);
 	}
 
-	public long toModule(SpirvBinary binary) {
+	public long toModule(SpirvBinary binary, String label) {
 		ByteArrayOutputStream vertexShaderByteArray = new ByteArrayOutputStream();
 		SpirvBinaryWriter.write(vertexShaderByteArray, binary);
+
+		if (VulkanInstance.DUMP_SHADERS) {
+			try (FileOutputStream fos = new FileOutputStream(label.replace("/", "-") + ".spirv")) {
+				fos.write(vertexShaderByteArray.toByteArray());
+			} catch (Throwable err) {
+				throw new RuntimeException(err);
+			}
+
+			TinyVK.LOGGER.info("Dumped {}", label);
+		}
 
 		int[] vulkanVertexBinary = new int[vertexShaderByteArray.size() / 4];
 		ByteBuffer.wrap(vertexShaderByteArray.toByteArray()).order(ByteOrder.nativeOrder()).asIntBuffer().get(vulkanVertexBinary);

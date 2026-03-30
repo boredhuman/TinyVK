@@ -43,6 +43,7 @@ public class VulkanInstance {
 	public static final int FRAMES_IN_FLIGHT = 3;
 	public static final boolean DUAL_LAUNCH = false;
 	private static final boolean VALIDATION = false;
+	public static final boolean DUMP_SHADERS = false;
 
 	private static VulkanInstance INSTANCE;
 	private static final List<String> REQUIRED_EXTENSIONS = List.of(
