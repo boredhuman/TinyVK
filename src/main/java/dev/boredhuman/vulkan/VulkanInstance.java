@@ -13,6 +13,8 @@ import org.lwjgl.vulkan.KHRCreateRenderpass2;
 import org.lwjgl.vulkan.KHRDepthStencilResolve;
 import org.lwjgl.vulkan.KHRDynamicRendering;
 import org.lwjgl.vulkan.KHRGetPhysicalDeviceProperties2;
+import org.lwjgl.vulkan.KHRMaintenance2;
+import org.lwjgl.vulkan.KHRMultiview;
 import org.lwjgl.vulkan.KHRPushDescriptor;
 import org.lwjgl.vulkan.KHRSurface;
 import org.lwjgl.vulkan.KHRSwapchain;
@@ -37,6 +39,7 @@ import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class VulkanInstance {
@@ -46,18 +49,63 @@ public class VulkanInstance {
 	public static final boolean DUMP_SHADERS = false;
 
 	private static VulkanInstance INSTANCE;
-	private static final List<String> REQUIRED_EXTENSIONS = List.of(
+
+	// extensions we need if only 1.0 is supported
+	private static final Set<String> REQUIRED_EXTENSIONS_1_0 = Set.of(
 		KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-		KHRCreateRenderpass2.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
-		KHRDepthStencilResolve.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
+		KHRDepthStencilResolve.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // Dependency of dynamic rendering,
+		KHRCreateRenderpass2.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // Dependency of depth stencil resolve
+		KHRMultiview.VK_KHR_MULTIVIEW_EXTENSION_NAME, // Dependency of create renderpass 2
+		KHRMaintenance2.VK_KHR_MAINTENANCE2_EXTENSION_NAME, // Dependency of create render pass 2
 		KHRPushDescriptor.VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+	);
+
+	// extensions we need if only 1.1 is supported
+	private static final Set<String> REQUIRED_EXTENSIONS_1_1 = Set.of(
+		KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+		KHRDepthStencilResolve.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // Dependency of dynamic rendering
+		KHRCreateRenderpass2.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // Dependency of depth stencil resolve
+		KHRPushDescriptor.VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+	);
+
+	// extensions we need if only 1.2 is supported
+	private static final Set<String> REQUIRED_EXTENSIONS_1_2 = Set.of(
+		KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+		KHRPushDescriptor.VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+	);
+
+	// extensions we need if only 1.3 is supported
+	private static final Set<String> REQUIRED_EXTENSIONS_1_3 = Set.of(
+		KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		KHRPushDescriptor.VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+	);
+
+	private static final Set<String> REQUIRED_EXTENSIONS_1_4 = Set.of(
+		KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	);
+
+	// So we don't have to switch on VK13 / VK14 and the extension classes
+	private static final Set<String> INCLUDE_DEPENDENCIES = Set.of(
+		KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+		KHRPushDescriptor.VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME
+	);
+
+	private static final Map<Integer, Set<String>> REQUIRED_EXTENSIONS = Map.of(
+		VK10.VK_MAKE_VERSION(1, 0, 0), VulkanInstance.REQUIRED_EXTENSIONS_1_0,
+		VK10.VK_MAKE_VERSION(1, 1, 0), VulkanInstance.REQUIRED_EXTENSIONS_1_1,
+		VK10.VK_MAKE_VERSION(1, 2, 0), VulkanInstance.REQUIRED_EXTENSIONS_1_2,
+		VK10.VK_MAKE_VERSION(1, 3, 0), VulkanInstance.REQUIRED_EXTENSIONS_1_3,
+		VK10.VK_MAKE_VERSION(1, 4, 0), VulkanInstance.REQUIRED_EXTENSIONS_1_4
 	);
 
 	private VkInstance vkInstance;
 	private VkPhysicalDevice vkPhysicalDevice;
 	private VkDevice vkDevice;
 	private long vmaAllocator;
+	private int version;
 
 	public void init(ShaderSource shaderSource) {
 		this.createInstance();
@@ -66,42 +114,56 @@ public class VulkanInstance {
 		VulkanWindow.getInstance().init();
 	}
 
-	private void checkSupportedExtensions() {
-		MemoryStack memoryStack = MemoryStack.stackPush();
+	private boolean doesDeviceHaveNeededExtensions(VkPhysicalDevice vkPhysicalDevice) {
+		try (MemoryStack memoryStack = MemoryStack.stackPush()) {
+			VkPhysicalDeviceProperties physicalDeviceProperties = VkPhysicalDeviceProperties.calloc(memoryStack);
 
-		IntBuffer extensionCount = memoryStack.callocInt(1);
+			VK10.vkGetPhysicalDeviceProperties(vkPhysicalDevice, physicalDeviceProperties);
 
-		if (VK10.vkEnumerateDeviceExtensionProperties(this.vkPhysicalDevice, (CharSequence) null, extensionCount, null) != VK10.VK_SUCCESS) {
-			throw new RuntimeException();
-		}
+			int apiVersion = physicalDeviceProperties.apiVersion();
+			int major = VK10.VK_VERSION_MAJOR(apiVersion);
+			int minor = VK10.VK_VERSION_MINOR(apiVersion);
 
-		VkExtensionProperties.Buffer extensions = VkExtensionProperties.calloc(extensionCount.get(0), memoryStack);
+			TinyVK.LOGGER.info("Device {} supports API version {}.{}", physicalDeviceProperties.deviceNameString(), major, minor);
 
-		if (VK10.vkEnumerateDeviceExtensionProperties(this.vkPhysicalDevice, (CharSequence) null, extensionCount, extensions) != VK10.VK_SUCCESS) {
-			throw new RuntimeException();
-		}
+			IntBuffer extensionCount = memoryStack.callocInt(1);
 
-		Set<String> extensionNames = new HashSet<>();
-
-		for (int i = 0, len = extensionCount.get(0); i < len; i++) {
-			VkExtensionProperties extensionProperties = extensions.get(i);
-
-			extensionNames.add(extensionProperties.extensionNameString());
-		}
-
-		if (!extensionNames.containsAll(VulkanInstance.REQUIRED_EXTENSIONS)) {
-			List<String> missingExtensions = new ArrayList<>();
-
-			for (String requiredExtension : VulkanInstance.REQUIRED_EXTENSIONS) {
-				if (!extensionNames.contains(requiredExtension)) {
-					missingExtensions.add(requiredExtension);
-				}
+			if (VK10.vkEnumerateDeviceExtensionProperties(vkPhysicalDevice, (CharSequence) null, extensionCount, null) != VK10.VK_SUCCESS) {
+				throw new RuntimeException();
 			}
 
-			throw new RuntimeException("Missing Extensions: " + missingExtensions.stream().reduce("", (a, b) -> a + "," + b));
-		}
+			VkExtensionProperties.Buffer extensions = VkExtensionProperties.calloc(extensionCount.get(0), memoryStack);
 
-		memoryStack.close();
+			if (VK10.vkEnumerateDeviceExtensionProperties(vkPhysicalDevice, (CharSequence) null, extensionCount, extensions) != VK10.VK_SUCCESS) {
+				throw new RuntimeException();
+			}
+
+			Set<String> extensionNames = new HashSet<>();
+
+			for (int i = 0, len = extensionCount.get(0); i < len; i++) {
+				VkExtensionProperties extensionProperties = extensions.get(i);
+
+				extensionNames.add(extensionProperties.extensionNameString());
+			}
+
+			Set<String> requiredExtensions = this.getRequiredExtensions(physicalDeviceProperties.apiVersion());
+
+			if (!extensionNames.containsAll(requiredExtensions)) {
+				List<String> missingExtensions = new ArrayList<>();
+
+				for (String requiredExtension : requiredExtensions) {
+					if (!extensionNames.contains(requiredExtension)) {
+						missingExtensions.add(requiredExtension);
+					}
+				}
+
+				TinyVK.LOGGER.info("Device {} missing extensions {}", physicalDeviceProperties.deviceNameString(), missingExtensions);
+
+				return false;
+			}
+
+			return true;
+		}
 	}
 
 	private void createDevice(ShaderSource shaderSource) {
@@ -145,10 +207,11 @@ public class VulkanInstance {
 			.queueFamilyIndex(queueFamilyIndex)
 			.pQueuePriorities(memoryStack.floats(1.0F, 0.99F));
 
-		this.checkSupportedExtensions();
+		Set<String> requiredExtensions = new HashSet<>(this.getRequiredExtensions(this.vkPhysicalDevice.getCapabilities().apiVersion));
+		requiredExtensions.addAll(VulkanInstance.INCLUDE_DEPENDENCIES);
 
-		PointerBuffer extensions = memoryStack.callocPointer(VulkanInstance.REQUIRED_EXTENSIONS.size());
-		for (String requiredExtension : VulkanInstance.REQUIRED_EXTENSIONS) {
+		PointerBuffer extensions = memoryStack.callocPointer(requiredExtensions.size());
+		for (String requiredExtension : requiredExtensions) {
 			extensions.put(memoryStack.UTF8(requiredExtension, true));
 		}
 
@@ -181,7 +244,7 @@ public class VulkanInstance {
 			.device(vkDevice)
 			.instance(this.vkInstance)
 			.pVulkanFunctions(VmaVulkanFunctions.calloc(memoryStack).set(this.vkInstance, vkDevice))
-			.vulkanApiVersion(VK10.VK_API_VERSION_1_0);
+			.vulkanApiVersion(vkDevice.getCapabilitiesInstance().apiVersion);
 
 		PointerBuffer vmaAllocatorHandle = memoryStack.callocPointer(1);
 
@@ -233,6 +296,8 @@ public class VulkanInstance {
 			for (int i = 0, len = devicesCount.get(0); i < len; i++) {
 				physicalDevices.add(new VkPhysicalDevice(devices.get(i), this.vkInstance));
 			}
+
+			physicalDevices.removeIf(e -> !this.doesDeviceHaveNeededExtensions(e));
 
 			VkPhysicalDeviceProperties.Buffer deviceProperties = VkPhysicalDeviceProperties.calloc(physicalDevices.size(), memoryStack);
 
@@ -314,8 +379,9 @@ public class VulkanInstance {
 
 		PointerBuffer glfwExtensions = GLFWVulkan.glfwGetRequiredInstanceExtensions();
 
-		PointerBuffer extensions = memoryStack.callocPointer(glfwExtensions.remaining() + 2);
+		PointerBuffer extensions = memoryStack.callocPointer(glfwExtensions.remaining() + 3);
 		extensions.put(glfwExtensions);
+		// need this incase we only have 1.0 devices
 		extensions.put(memoryStack.UTF8(KHRGetPhysicalDeviceProperties2.VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
 		extensions.put(memoryStack.UTF8(EXTDebugUtils.VK_EXT_DEBUG_UTILS_EXTENSION_NAME));
 
@@ -331,6 +397,11 @@ public class VulkanInstance {
 		memoryStack.close();
 
 		this.vkInstance = new VkInstance(vulkanInstance.get(0), vkInstanceCreateInfo);
+	}
+
+	private Set<String> getRequiredExtensions(int deviceVersion) {
+		int version = VK10.VK_MAKE_VERSION(1, Math.min(4, VK10.VK_VERSION_MINOR(deviceVersion)), 0);
+		return VulkanInstance.REQUIRED_EXTENSIONS.get(version);
 	}
 
 	public VkInstance getVulkanInstance() {

@@ -17,7 +17,8 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
-project.ext.lwjglVersion = "3.3.3"
+// first lwjgl version with vulkan support
+project.ext.lwjglVersion = "3.3.5"
 project.ext.lwjglNatives = "natives-windows"
 
 base {
