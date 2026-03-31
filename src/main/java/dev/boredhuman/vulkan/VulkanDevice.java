@@ -373,17 +373,6 @@ public class VulkanDevice {
 		return new VkCompileResult(VkCompileResult.Status.SUCCESS, new PipelineGroup(programData, renderPipeline));
 	}
 
-
-	public int findSuitableMemory(int supportedMemoryTypes, int requirements) {
-		for (int i = 0, len = this.memoryProperties.memoryTypeCount(); i < len; i++) {
-			int propertiesFlag = this.memoryProperties.memoryTypes(i).propertyFlags();
-			if ((propertiesFlag & supportedMemoryTypes) != 0 && (requirements == 0 || (propertiesFlag & requirements) == requirements)) {
-				return i;
-			}
-		}
-		throw new RuntimeException("Did not find suitable memory");
-	}
-
 	public void onFrameEnd(Runnable task) {
 		this.frameFinishedTasks.get(this.frameIndex).add(task);
 	}
@@ -485,6 +474,18 @@ public class VulkanDevice {
 
 		VK10.vkDestroyCommandPool(this.vkDevice, this.commandPool, null);
 		VK10.vkDestroyDevice(this.vkDevice, null);
+	}
+
+	public void clearPipelineCache() {
+		// wait for graphics work to finish
+		VK10.vkQueueWaitIdle(this.graphicsQueue);
+
+		for (PipelineGroup pipelineGroup : this.pipelineGroups.values()) {
+			pipelineGroup.free();
+		}
+
+		this.pipelineGroups.clear();
+		this.cachedShaders.clear();
 	}
 
 	public static VulkanDevice getInstance() {

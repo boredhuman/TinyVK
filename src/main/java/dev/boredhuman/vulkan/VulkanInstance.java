@@ -37,6 +37,8 @@ import org.lwjgl.vulkan.VkQueueFamilyProperties;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -105,17 +107,55 @@ public class VulkanInstance {
 	private VkPhysicalDevice vkPhysicalDevice;
 	private VkDevice vkDevice;
 	private long vmaAllocator;
-	private int version;
 
 	public void init(ShaderSource shaderSource) {
 		this.createInstance();
-		this.choosePhysicalDevice();
+		this.choosePhysicalDevice(VulkanWindow.getInstance().getSurface());
 		this.createDevice(shaderSource);
 		VulkanWindow.getInstance().init();
 	}
 
+	private int findWantedQueue(VkPhysicalDevice vkPhysicalDevice, long surface) {
+		try (MemoryStack memoryStack = VkHelper.stackPush()) {
+
+			IntBuffer queueFamilyCount = memoryStack.callocInt(1);
+
+			VK10.vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, queueFamilyCount, null);
+
+			VkQueueFamilyProperties.Buffer queueFamilyPropertiesList = VkQueueFamilyProperties.calloc(queueFamilyCount.get(0), memoryStack);
+
+			VK10.vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, queueFamilyCount, queueFamilyPropertiesList);
+
+			IntBuffer supported = memoryStack.callocInt(1);
+
+			for (int i = 0, len = queueFamilyPropertiesList.remaining(); i < len; i++) {
+				VkQueueFamilyProperties queueFamilyProperties = queueFamilyPropertiesList.get(i);
+
+				if (KHRSurface.vkGetPhysicalDeviceSurfaceSupportKHR(vkPhysicalDevice, i, surface, supported) != VK10.VK_SUCCESS) {
+					throw new RuntimeException();
+				}
+
+				// want present support
+				if (supported.get(0) == 0) {
+					continue;
+				}
+
+				// want one queue for graphics and another for present
+				if (queueFamilyProperties.queueCount() < 2) {
+					continue;
+				}
+
+				if ((queueFamilyProperties.queueFlags() & VK10.VK_QUEUE_GRAPHICS_BIT) != 0) {
+					return i;
+				}
+			}
+
+			return -1;
+		}
+	}
+
 	private boolean doesDeviceHaveNeededExtensions(VkPhysicalDevice vkPhysicalDevice) {
-		try (MemoryStack memoryStack = MemoryStack.stackPush()) {
+		try (MemoryStack memoryStack = VkHelper.stackPush()) {
 			VkPhysicalDeviceProperties physicalDeviceProperties = VkPhysicalDeviceProperties.calloc(memoryStack);
 
 			VK10.vkGetPhysicalDeviceProperties(vkPhysicalDevice, physicalDeviceProperties);
@@ -179,28 +219,7 @@ public class VulkanInstance {
 
 		VK10.vkGetPhysicalDeviceQueueFamilyProperties(this.vkPhysicalDevice, queueFamilyCount, queueFamilyPropertiesList);
 
-		int queueFamilyIndex = -1;
-		int timestampValidBits = 0;
-
-		IntBuffer supported = memoryStack.callocInt(1);
-
-		for (int i = 0, len = queueFamilyPropertiesList.remaining(); i < len; i++) {
-			VkQueueFamilyProperties queueFamilyProperties = queueFamilyPropertiesList.get(0);
-
-			if (KHRSurface.vkGetPhysicalDeviceSurfaceSupportKHR(this.vkPhysicalDevice, i, surface, supported) != VK10.VK_SUCCESS) {
-				throw new RuntimeException();
-			}
-
-			if ((queueFamilyProperties.queueFlags() & VK10.VK_QUEUE_GRAPHICS_BIT) != 0 && supported.get(0) != 0) {
-				queueFamilyIndex = i;
-				timestampValidBits = queueFamilyProperties.timestampValidBits();
-				break;
-			}
-		}
-
-		if (queueFamilyIndex == -1) {
-			throw new RuntimeException("Could not find queue family with graphics support");
-		}
+		int queueFamilyIndex = this.findWantedQueue(this.vkPhysicalDevice, surface);
 
 		VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfo = VkDeviceQueueCreateInfo.calloc(1, memoryStack)
 			.sType$Default()
@@ -272,12 +291,12 @@ public class VulkanInstance {
 		deviceLimits.minUniformAlignment = (int) limits.minUniformBufferOffsetAlignment();
 		deviceLimits.maxAnisotropy = limits.maxSamplerAnisotropy();
 		deviceLimits.nonCoherentAtomSize = limits.nonCoherentAtomSize();
-		deviceLimits.supportsTimestamps = limits.timestampPeriod() != 0 && timestampValidBits != 0;
+		deviceLimits.supportsTimestamps = limits.timestampPeriod() != 0;
 
 		VulkanDevice.getInstance().init(vkDevice, queueFamilyIndex, memoryProperties, deviceLimits, shaderSource);
 	}
 
-	private void choosePhysicalDevice() {
+	private void choosePhysicalDevice(long surface) {
 		try (MemoryStack memoryStack = VkHelper.stackPush()) {
 			IntBuffer devicesCount = memoryStack.callocInt(1);
 
@@ -299,12 +318,25 @@ public class VulkanInstance {
 
 			physicalDevices.removeIf(e -> !this.doesDeviceHaveNeededExtensions(e));
 
+			if (physicalDevices.isEmpty()) {
+				throw new RuntimeException("No devices support the needed extensions");
+			}
+
+			physicalDevices.removeIf(e -> this.findWantedQueue(e, surface) == -1);
+
+			if (physicalDevices.isEmpty()) {
+				throw new RuntimeException("No devices provided the needed queue types");
+			}
+
+			// sort by highest api version support first
+			physicalDevices.sort(Collections.reverseOrder(Comparator.comparingInt(e -> e.getCapabilities().apiVersion)));
+
 			VkPhysicalDeviceProperties.Buffer deviceProperties = VkPhysicalDeviceProperties.calloc(physicalDevices.size(), memoryStack);
 
 			for (int i = 0; i < physicalDevices.size(); i++) {
 				VkPhysicalDevice physicalDevice = physicalDevices.get(i);
 
-				VK10.vkGetPhysicalDeviceProperties(physicalDevice, deviceProperties.get(0));
+				VK10.vkGetPhysicalDeviceProperties(physicalDevice, deviceProperties.get(i));
 			}
 
 			for (int i = 0, len = deviceProperties.remaining(); i < len; i++) {
@@ -312,6 +344,7 @@ public class VulkanInstance {
 					TinyVK.LOGGER.info("Found discrete gpu {}", deviceProperties.deviceNameString());
 
 					this.vkPhysicalDevice = physicalDevices.get(i);
+					return;
 				}
 			}
 
@@ -320,10 +353,12 @@ public class VulkanInstance {
 					TinyVK.LOGGER.info("Found integrated gpu {}", deviceProperties.deviceNameString());
 
 					this.vkPhysicalDevice = physicalDevices.get(i);
+					return;
 				}
 			}
 
 			this.vkPhysicalDevice = physicalDevices.getFirst();
+			TinyVK.LOGGER.info("Found no discrete or integrated graphics defaulting to first supported device");
 		}
 	}
 

@@ -142,7 +142,7 @@ public class VkGpuDevice implements GpuDevice {
 
 	@Override
 	public void clearPipelineCache() {
-
+		VulkanDevice.getInstance().clearPipelineCache();
 	}
 
 	@Override

@@ -38,6 +38,10 @@ public class VulkanWindow {
 	}
 
 	public long getSurface() {
+		if (this.surface != 0) {
+			return this.surface;
+		}
+
 		Window window = Minecraft.getInstance().getWindow();
 
 		this.width = window.getWidth();

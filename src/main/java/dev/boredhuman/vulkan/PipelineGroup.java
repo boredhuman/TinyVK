@@ -19,7 +19,6 @@ import java.util.stream.Stream;
 public class PipelineGroup implements CompiledRenderPipeline {
 	private final ProgramData programData;
 	private final ShaderResources shaderResources;
-	private final long descriptorPool;
 	private final Map<RenderPassFormat, Long> graphicPipelines = new HashMap<>();
 	private final Map<Integer, Integer> samplerIndexes = new HashMap<>();
 	private final Set<Integer> missingSamplers = new HashSet<>();
@@ -27,7 +26,6 @@ public class PipelineGroup implements CompiledRenderPipeline {
 	public PipelineGroup(ProgramData programData, RenderPipeline renderPipeline) {
 		this.programData = programData;
 		this.shaderResources = this.createShaderResources(renderPipeline.getLocation().getPath());
-		this.descriptorPool = this.shaderResources.createPool();
 
 		int samplerIndex = 0;
 		for (String sampler : renderPipeline.getSamplers()) {
@@ -131,7 +129,6 @@ public class PipelineGroup implements CompiledRenderPipeline {
 		}
 
 		this.shaderResources.free();
-		VK10.vkDestroyDescriptorPool(device, this.descriptorPool, null);
 	}
 
 	public ProgramData getProgramData() {
