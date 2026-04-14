@@ -14,8 +14,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
 @Mixin(RenderSystem.class)
 public class RenderSystemMixin {
@@ -32,6 +34,16 @@ public class RenderSystemMixin {
 			return original.call(window, logLevel, syncLogs, shaderSource, debugLabels);
 		} else {
 			return null;
+		}
+	}
+
+	@ModifyArgs(
+		method = "initRenderer", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/opengl/GlDevice;<init>(JIZLcom/mojang/blaze3d/shaders/ShaderSource;Z)V")
+	)
+	private static void tinyvk$addDebugLabels(Args args) {
+		if (VulkanInstance.VALIDATION) {
+			args.set(2, true);
+			args.set(4, true);
 		}
 	}
 

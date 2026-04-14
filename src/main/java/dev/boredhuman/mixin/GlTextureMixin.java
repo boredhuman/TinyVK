@@ -13,21 +13,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GlTexture.class)
 public class GlTextureMixin implements ImageHolder {
 	@Unique
-	private VkImage tinyvk$VkImage;
+	private VkImage tinyvk$image;
 
 	@Override
 	public void tinyvk$setImage(VkImage vkImage) {
-		this.tinyvk$VkImage = vkImage;
+		this.tinyvk$image = vkImage;
 	}
 
 	@Override
 	public VkImage tinyvk$getImage() {
-		return this.tinyvk$VkImage;
+		return this.tinyvk$image;
 	}
 
 	@Inject(method = "destroyImmediately", at = @At("TAIL"))
 	private void tinyvk$deleteImmediately(CallbackInfo ci) {
-		VulkanDevice.getInstance().onFrameEnd(this.tinyvk$VkImage::close);
-		this.tinyvk$VkImage = null;
+		VulkanDevice.getInstance().onFrameEnd(this.tinyvk$image::close);
+		this.tinyvk$image = null;
 	}
 }

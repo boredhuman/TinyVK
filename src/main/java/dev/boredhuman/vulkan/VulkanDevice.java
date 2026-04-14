@@ -25,7 +25,6 @@ import org.lwjgl.vulkan.VkDevice;
 import org.lwjgl.vulkan.VkFenceCreateInfo;
 import org.lwjgl.vulkan.VkImageBlit;
 import org.lwjgl.vulkan.VkImageMemoryBarrier;
-import org.lwjgl.vulkan.VkPhysicalDeviceMemoryProperties;
 import org.lwjgl.vulkan.VkQueue;
 import org.lwjgl.vulkan.VkSemaphoreCreateInfo;
 import org.lwjgl.vulkan.VkSubmitInfo;
@@ -41,7 +40,6 @@ public class VulkanDevice {
 	private static VulkanDevice INSTANCE;
 
 	public VkDevice vkDevice;
-	private VkPhysicalDeviceMemoryProperties memoryProperties;
 	private DeviceLimits deviceLimits;
 
 	private long commandPool;
@@ -66,10 +64,8 @@ public class VulkanDevice {
 	private ShaderSource shaderSource;
 	public PresentManager presentManager;
 
-	public void init(VkDevice vkDevice, int queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties, DeviceLimits deviceLimits,
-					 ShaderSource shaderSource) {
+	public void init(VkDevice vkDevice, int queueFamilyIndex, DeviceLimits deviceLimits, ShaderSource shaderSource) {
 		this.vkDevice = vkDevice;
-		this.memoryProperties = memoryProperties;
 		this.deviceLimits = deviceLimits;
 		this.shaderSource = shaderSource;
 		this.createCommandPool(queueFamilyIndex);
@@ -143,6 +139,7 @@ public class VulkanDevice {
 		this.frameIndex = (this.frameIndex + 1) % VulkanInstance.FRAMES_IN_FLIGHT;
 		this.absoluteFrameIndex++;
 		this.currentCommandBuffer = this.commandBuffers[this.frameIndex];
+		this.boundPipeline = VK10.VK_NULL_HANDLE;
 
 		this.startFrame();
 	}

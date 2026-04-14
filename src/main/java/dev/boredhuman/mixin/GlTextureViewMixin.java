@@ -13,21 +13,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GlTextureView.class)
 public class GlTextureViewMixin implements ImageViewHolder {
 	@Unique
-	private VkImageView tinyvk$VkImageView;
+	private VkImageView tinyvk$ImageView;
 
 	@Override
 	public void tinyvk$setImageView(VkImageView vkImageView) {
-		this.tinyvk$VkImageView = vkImageView;
+		this.tinyvk$ImageView = vkImageView;
 	}
 
 	@Override
 	public VkImageView tinyvk$getImageView() {
-		return this.tinyvk$VkImageView;
+		return this.tinyvk$ImageView;
 	}
 
 	@Inject(method = "close", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/opengl/GlTextureView;texture()Lcom/mojang/blaze3d/opengl/GlTexture;"))
 	public void tinyvk$close(CallbackInfo ci) {
-		VulkanDevice.getInstance().onFrameEnd(this.tinyvk$VkImageView::close);
-		this.tinyvk$VkImageView = null;
+		VulkanDevice.getInstance().onFrameEnd(this.tinyvk$ImageView::close);
+		this.tinyvk$ImageView = null;
 	}
 }

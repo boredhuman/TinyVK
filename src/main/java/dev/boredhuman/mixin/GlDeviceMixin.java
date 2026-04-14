@@ -41,17 +41,6 @@ public class GlDeviceMixin {
 	}
 
 	@Inject(
-		method = "createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;",
-		at = @At("TAIL")
-	)
-	private void tinyvk$createTexture(@Nullable Supplier<String> labelSupplier, @GpuTexture.Usage int usage, TextureFormat textureFormat, int width,
-									  int height, int depthOrLayers, int mipLevels, CallbackInfoReturnable<GpuTexture> cir) {
-		VkImage texture = VulkanDevice.getInstance().getImpl().createTexture(labelSupplier, usage, textureFormat, width, height, depthOrLayers, mipLevels);
-		GpuTexture gpuTexture = cir.getReturnValue();
-		((ImageHolder) gpuTexture).tinyvk$setImage(texture);
-	}
-
-	@Inject(
 		method = "createTexture(Ljava/lang/String;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;", at = @At("TAIL")
 	)
 	private void tinyvk$createTexture(@Nullable String label, @GpuTexture.Usage int usage, TextureFormat textureFormat, int width, int height,

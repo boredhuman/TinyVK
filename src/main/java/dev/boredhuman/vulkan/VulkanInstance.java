@@ -47,7 +47,7 @@ import java.util.Set;
 public class VulkanInstance {
 	public static final int FRAMES_IN_FLIGHT = 3;
 	public static final boolean DUAL_LAUNCH = false;
-	private static final boolean VALIDATION = false;
+	public static final boolean VALIDATION = false;
 	public static final boolean DUMP_SHADERS = false;
 
 	private static VulkanInstance INSTANCE;
@@ -293,7 +293,7 @@ public class VulkanInstance {
 		deviceLimits.nonCoherentAtomSize = limits.nonCoherentAtomSize();
 		deviceLimits.supportsTimestamps = limits.timestampPeriod() != 0;
 
-		VulkanDevice.getInstance().init(vkDevice, queueFamilyIndex, memoryProperties, deviceLimits, shaderSource);
+		VulkanDevice.getInstance().init(vkDevice, queueFamilyIndex, deviceLimits, shaderSource);
 	}
 
 	private void choosePhysicalDevice(long surface) {

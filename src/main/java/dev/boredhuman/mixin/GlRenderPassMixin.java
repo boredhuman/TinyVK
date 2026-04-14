@@ -77,6 +77,9 @@ public class GlRenderPassMixin implements RenderPassHolder {
 	private <T> void tinyvk$drawMultiple(Collection<RenderPass.Draw<T>> draws, @Nullable GpuBuffer defaultIndexBuffer,
 										 VertexFormat.@Nullable IndexType defaultIndexType, Collection<String> dynamicUniforms, T uniformArgument,
 										 CallbackInfo ci) {
+		if (defaultIndexBuffer != null) {
+			defaultIndexBuffer = ((BufferHolder) defaultIndexBuffer).tinyvk$getBuffer();
+		}
 		this.tinyvk$renderPass.drawMultipleIndexed(draws, defaultIndexBuffer, defaultIndexType, dynamicUniforms, uniformArgument);
 	}
 

@@ -49,6 +49,7 @@ public class VkRenderPass implements RenderPass {
 	private int scissorY;
 	private int scissorWidth;
 	private int scissorHeight;
+	private boolean invalidDraw = false;
 
 	public VkRenderPass(int width, int height) {
 		this.width = width;
@@ -73,7 +74,16 @@ public class VkRenderPass implements RenderPass {
 
 	@Override
 	public void bindTexture(String samplerName, @Nullable GpuTextureView gpuTextureView, @Nullable GpuSampler gpuSampler) {
-		this.samplers.put(samplerName, new ViewSampler((VkImageView) gpuTextureView, (VkSampler) gpuSampler));
+		if (gpuTextureView == null) {
+			this.invalidDraw = true;
+			return;
+		}
+
+		if (gpuSampler == null) {
+			this.samplers.remove(samplerName);
+		} else {
+			this.samplers.put(samplerName, new ViewSampler((VkImageView) gpuTextureView, (VkSampler) gpuSampler));
+		}
 		this.dirtyUniforms.add(samplerName);
 	}
 
@@ -139,6 +149,9 @@ public class VkRenderPass implements RenderPass {
 
 	@Override
 	public void drawIndexed(int baseVertex, int firstIndex, int indexCount, int instanceCount) {
+		if (this.invalidDraw) {
+			return;
+		}
 		this.updateUniforms();
 		VkCommandBuffer commandBuffer = VulkanDevice.getInstance().getCommandBuffer();
 		VK10.vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, baseVertex, 0);
@@ -150,6 +163,9 @@ public class VkRenderPass implements RenderPass {
 										VertexFormat.@Nullable IndexType defaultIndexType,
 										Collection<String> dynamicUniforms,
 										T uniformArgument) {
+		if (this.invalidDraw) {
+			return;
+		}
 		this.updateUniforms();
 
 		PipelineGroup boundPipelineGroup = VulkanDevice.getInstance().getBoundPipelineGroup();
@@ -176,12 +192,20 @@ public class VkRenderPass implements RenderPass {
 			for (Draw<T> draw : draws) {
 				GpuBuffer vertexBuffer = draw.vertexBuffer();
 
-				this.setVertexBuffer(0, vertexBuffer);
+				if (VulkanInstance.DUAL_LAUNCH) {
+					this.setVertexBuffer(0, ((BufferHolder) vertexBuffer).tinyvk$getBuffer());
+				} else {
+					this.setVertexBuffer(0, vertexBuffer);
+				}
 
 				GpuBuffer indexBuffer = draw.indexBuffer();
 
 				if (indexBuffer != null) {
-					this.setIndexBuffer(indexBuffer, draw.indexType());
+					if (VulkanInstance.DUAL_LAUNCH) {
+						this.setIndexBuffer(((BufferHolder) indexBuffer).tinyvk$getBuffer(), draw.indexType());
+					} else {
+						this.setIndexBuffer(indexBuffer, draw.indexType());
+					}
 				} else {
 					this.setIndexBuffer(defaultIndexBuffer, defaultIndexType);
 				}
@@ -212,12 +236,20 @@ public class VkRenderPass implements RenderPass {
 			for (Draw<T> draw : draws) {
 				GpuBuffer vertexBuffer = draw.vertexBuffer();
 
-				this.setVertexBuffer(0, vertexBuffer);
+				if (VulkanInstance.DUAL_LAUNCH) {
+					this.setVertexBuffer(0, ((BufferHolder) vertexBuffer).tinyvk$getBuffer());
+				} else {
+					this.setVertexBuffer(0, vertexBuffer);
+				}
 
 				GpuBuffer indexBuffer = draw.indexBuffer();
 
 				if (indexBuffer != null) {
-					this.setIndexBuffer(indexBuffer, draw.indexType());
+					if (VulkanInstance.DUAL_LAUNCH) {
+						this.setIndexBuffer(((BufferHolder) indexBuffer).tinyvk$getBuffer(), draw.indexType());
+					} else {
+						this.setIndexBuffer(indexBuffer, draw.indexType());
+					}
 				} else {
 					this.setIndexBuffer(defaultIndexBuffer, defaultIndexType);
 				}
@@ -264,6 +296,9 @@ public class VkRenderPass implements RenderPass {
 
 	@Override
 	public void draw(int firstVertex, int vertexCount) {
+		if (this.invalidDraw) {
+			return;
+		}
 		this.updateUniforms();
 		VkCommandBuffer commandBuffer = VulkanDevice.getInstance().getCommandBuffer();
 		VK10.vkCmdDraw(commandBuffer, vertexCount, 1, firstVertex, 0);
