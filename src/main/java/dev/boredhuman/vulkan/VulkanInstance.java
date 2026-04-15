@@ -36,6 +36,7 @@ import org.lwjgl.vulkan.VkQueueFamilyProperties;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -115,9 +116,8 @@ public class VulkanInstance {
 		VulkanWindow.getInstance().init();
 	}
 
-	private int findWantedQueue(VkPhysicalDevice vkPhysicalDevice, long surface) {
+	private List<Map.Entry<Integer, Integer>> findWantedQueue(VkPhysicalDevice vkPhysicalDevice, long surface) {
 		try (MemoryStack memoryStack = VkHelper.stackPush()) {
-
 			IntBuffer queueFamilyCount = memoryStack.callocInt(1);
 
 			VK10.vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, queueFamilyCount, null);
@@ -127,6 +127,8 @@ public class VulkanInstance {
 			VK10.vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, queueFamilyCount, queueFamilyPropertiesList);
 
 			IntBuffer supported = memoryStack.callocInt(1);
+
+			List<Map.Entry<Integer, Integer>> supportedQueueFamilies = new ArrayList<>();
 
 			for (int i = 0, len = queueFamilyPropertiesList.remaining(); i < len; i++) {
 				VkQueueFamilyProperties queueFamilyProperties = queueFamilyPropertiesList.get(i);
@@ -140,17 +142,14 @@ public class VulkanInstance {
 					continue;
 				}
 
-				// want one queue for graphics and another for present
-				if (queueFamilyProperties.queueCount() < 2) {
-					continue;
-				}
+				int queueCount = queueFamilyProperties.queueCount();
 
 				if ((queueFamilyProperties.queueFlags() & VK10.VK_QUEUE_GRAPHICS_BIT) != 0) {
-					return i;
+					supportedQueueFamilies.add(new AbstractMap.SimpleEntry<>(i, queueCount));
 				}
 			}
 
-			return -1;
+			return supportedQueueFamilies;
 		}
 	}
 
@@ -219,11 +218,19 @@ public class VulkanInstance {
 
 		VK10.vkGetPhysicalDeviceQueueFamilyProperties(this.vkPhysicalDevice, queueFamilyCount, queueFamilyPropertiesList);
 
-		int queueFamilyIndex = this.findWantedQueue(this.vkPhysicalDevice, surface);
+		List<Map.Entry<Integer, Integer>> wantedQueue = this.findWantedQueue(this.vkPhysicalDevice, surface);
+
+		if (wantedQueue.isEmpty()) {
+			throw new RuntimeException("Found no suitable queues!");
+		}
+
+		// find first queue family with 2 or more queues
+		Map.Entry<Integer, Integer> useQueue = wantedQueue.stream().filter(e -> e.getValue() > 1).findFirst()
+			.orElse(wantedQueue.getFirst());
 
 		VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfo = VkDeviceQueueCreateInfo.calloc(1, memoryStack)
 			.sType$Default()
-			.queueFamilyIndex(queueFamilyIndex)
+			.queueFamilyIndex(useQueue.getKey())
 			.pQueuePriorities(memoryStack.floats(1.0F, 0.99F));
 
 		Set<String> requiredExtensions = new HashSet<>(this.getRequiredExtensions(this.vkPhysicalDevice.getCapabilities().apiVersion));
@@ -293,7 +300,7 @@ public class VulkanInstance {
 		deviceLimits.nonCoherentAtomSize = limits.nonCoherentAtomSize();
 		deviceLimits.supportsTimestamps = limits.timestampPeriod() != 0;
 
-		VulkanDevice.getInstance().init(vkDevice, queueFamilyIndex, deviceLimits, shaderSource);
+		VulkanDevice.getInstance().init(vkDevice, useQueue.getKey(), useQueue.getValue(), deviceLimits, shaderSource);
 	}
 
 	private void choosePhysicalDevice(long surface) {
@@ -322,7 +329,7 @@ public class VulkanInstance {
 				throw new RuntimeException("No devices support the needed extensions");
 			}
 
-			physicalDevices.removeIf(e -> this.findWantedQueue(e, surface) == -1);
+			physicalDevices.removeIf(e -> this.findWantedQueue(e, surface).isEmpty());
 
 			if (physicalDevices.isEmpty()) {
 				throw new RuntimeException("No devices provided the needed queue types");

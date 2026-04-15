@@ -19,7 +19,8 @@ group = project.maven_group
 
 // first lwjgl version with vulkan support
 project.ext.lwjglVersion = "3.3.3"
-project.ext.lwjglNatives = "natives-windows"
+String macosNatives = "natives-macos-arm64";
+List<String> nativeLibs = List.of("natives-windows", macosNatives)
 
 base {
     archivesName = project.archives_base_name
@@ -47,9 +48,11 @@ dependencies {
     implementation "org.lwjgl:lwjgl-shaderc"
     implementation "org.lwjgl:lwjgl-vulkan"
     implementation "org.lwjgl:lwjgl-vma"
-    implementation "org.lwjgl:lwjgl::$lwjglNatives"
-    implementation "org.lwjgl:lwjgl-shaderc::$lwjglNatives"
-    implementation "org.lwjgl:lwjgl-vma::$lwjglNatives"
+    for (String nativeLib : nativeLibs) {
+        implementation "org.lwjgl:lwjgl::$nativeLib"
+        implementation "org.lwjgl:lwjgl-shaderc::$nativeLib"
+        implementation "org.lwjgl:lwjgl-vma::$nativeLib"
+    }
     implementation "com.github.boredhuman:JavaSpirv:969d33a396"
 }
 
@@ -132,9 +135,12 @@ shadowJar {
 
         // The Native JARs (These are separate artifacts in the dependency graph)
         // Shadow treats the classifier as part of the artifact identity here
-        include(dependency("org.lwjgl:lwjgl::$lwjglNatives"))
-        include(dependency("org.lwjgl:lwjgl-shaderc::$lwjglNatives"))
-        include(dependency("org.lwjgl:lwjgl-vma::$lwjglNatives"))
+        for (String nativeLib : nativeLibs) {
+            include(dependency("org.lwjgl:lwjgl::$nativeLib"))
+            include(dependency("org.lwjgl:lwjgl-shaderc::$nativeLib"))
+            include(dependency("org.lwjgl:lwjgl-vma::$nativeLib"))
+        }
+        include(dependency("org.lwjgl:lwjgl-vulkan::$macosNatives"))
 
         // Your specific JavaSpirv dependency
         include(dependency("com.github.boredhuman:JavaSpirv"))

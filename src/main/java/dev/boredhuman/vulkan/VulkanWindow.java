@@ -26,12 +26,12 @@ public class VulkanWindow {
 
 	long window;
 	long surface;
-	long swapChain;
+	public long swapChain;
 	int width;
 	int height;
 
-	long[] swapchainImages;
-	long[] imageSemaphores;
+	public long[] swapchainImages;
+	public long[] imageSemaphores;
 
 	public void init() {
 		this.setupSwapChain();

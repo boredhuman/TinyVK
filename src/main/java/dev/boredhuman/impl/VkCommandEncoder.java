@@ -404,7 +404,11 @@ public class VkCommandEncoder implements CommandEncoder {
 		MemoryStack memoryStack = VkHelper.stackPush();
 
 		VkBufferImageCopy.Buffer copy = VkBufferImageCopy.calloc(1, memoryStack);
+
+		copy.bufferOffset(offset);
 		copy.imageSubresource().aspectMask(srcImage.imageAspect).mipLevel(mipLevel).layerCount(1);
+		copy.imageOffset().set(x, y, 0);
+		copy.imageExtent().set(width, height, 1);
 
 		VK10.vkCmdCopyImageToBuffer(commandBuffer, srcImage.image, VK10.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstBuffer.buffer, copy);
 

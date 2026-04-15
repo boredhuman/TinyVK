@@ -1,6 +1,10 @@
-package dev.boredhuman.vulkan;
+package dev.boredhuman.vulkan.present;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import dev.boredhuman.vulkan.AcquireResult;
+import dev.boredhuman.vulkan.VulkanDevice;
+import dev.boredhuman.vulkan.VulkanInstance;
+import dev.boredhuman.vulkan.VulkanWindow;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.KHRSwapchain;
 import org.lwjgl.vulkan.VK10;
@@ -13,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-public class PresentManager {
+public class AsyncPresentManager implements PresentManager {
 	private final ExecutorService presentThread = Executors.newSingleThreadExecutor(
 		new ThreadFactoryBuilder().setNameFormat("Present-Thread").setThreadFactory(Executors.defaultThreadFactory()).setDaemon(true)
 			.setPriority(Thread.MAX_PRIORITY).build());
@@ -28,7 +32,7 @@ public class PresentManager {
 	private volatile boolean updateSwapchain = false;
 	private MemoryStack presentMemory;
 
-	public PresentManager(VkQueue presentQueue) {
+	public AsyncPresentManager(VkQueue presentQueue) {
 		this.presentQueue = presentQueue;
 
 		VulkanDevice vulkanDevice = VulkanDevice.getInstance();
@@ -44,6 +48,7 @@ public class PresentManager {
 		});
 	}
 
+	@Override
 	public AcquireResult acquireImage() {
 		if (this.updateSwapchain && this.currentFetch == null) {
 			VulkanWindow.getInstance().recreateSwapchain();
@@ -105,6 +110,7 @@ public class PresentManager {
 		});
 	}
 
+	@Override
 	public void present(AcquireResult acquireResult) {
 		this.presentThread.submit(() -> {
 			MemoryStack memoryStack = this.presentMemory.push();
@@ -127,6 +133,7 @@ public class PresentManager {
 		});
 	}
 
+	@Override
 	public void free() {
 		VK10.vkQueueWaitIdle(this.presentQueue);
 

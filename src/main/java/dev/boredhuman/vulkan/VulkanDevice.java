@@ -5,11 +5,15 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
+import dev.boredhuman.TinyVK;
 import dev.boredhuman.impl.VkCommandEncoder;
 import dev.boredhuman.impl.VkCompileResult;
 import dev.boredhuman.impl.VkGpuDevice;
 import dev.boredhuman.shaders.ProgramData;
 import dev.boredhuman.shaders.ShaderCompiler;
+import dev.boredhuman.vulkan.present.AsyncPresentManager;
+import dev.boredhuman.vulkan.present.PresentManager;
+import dev.boredhuman.vulkan.present.SyncPresentManager;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.EXTDebugUtils;
@@ -64,7 +68,7 @@ public class VulkanDevice {
 	private ShaderSource shaderSource;
 	public PresentManager presentManager;
 
-	public void init(VkDevice vkDevice, int queueFamilyIndex, DeviceLimits deviceLimits, ShaderSource shaderSource) {
+	public void init(VkDevice vkDevice, int queueFamilyIndex, int queueCount, DeviceLimits deviceLimits, ShaderSource shaderSource) {
 		this.vkDevice = vkDevice;
 		this.deviceLimits = deviceLimits;
 		this.shaderSource = shaderSource;
@@ -80,7 +84,13 @@ public class VulkanDevice {
 		this.impl = new VkGpuDevice();
 		this.commandEncoder = new VkCommandEncoder();
 
-		this.presentManager = new PresentManager(this.getQueue(queueFamilyIndex, 1, "PresentQueue"));
+		if (queueCount > 1) {
+			TinyVK.LOGGER.info("Using async swapchain");
+			this.presentManager = new AsyncPresentManager(this.getQueue(queueFamilyIndex, 1, "PresentQueue"));
+		} else {
+			TinyVK.LOGGER.info("Using synchronized swapchain");
+			this.presentManager = new SyncPresentManager(this.graphicsQueue);
+		}
 
 		this.startFrame();
 	}
