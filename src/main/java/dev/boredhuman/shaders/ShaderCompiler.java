@@ -70,6 +70,9 @@ public class ShaderCompiler {
 		ShaderHelper vertexShaderHelper = new ShaderHelper(vertexParsed);
 		ShaderHelper fragmentShaderHelper = new ShaderHelper(fragmentParsed);
 
+		vertexShaderHelper.escapeSpecialNames();
+		fragmentShaderHelper.escapeSpecialNames();
+
 		vertexShaderHelper.setDecorationArg("gl_VertexID", BuiltIn.VERTEX_INDEX);
 		vertexShaderHelper.setDecorationArg("gl_InstanceID", BuiltIn.INSTANCE_INDEX);
 

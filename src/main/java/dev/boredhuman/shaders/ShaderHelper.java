@@ -338,6 +338,17 @@ public class ShaderHelper {
 		return constant;
 	}
 
+	/**
+	 * Need to escape sampler as it's a keyword in other shader languages (MSL)
+	 */
+	public void escapeSpecialNames() {
+		for (Instruction instruction : this.spirvModule.debugNaming) {
+			if (instruction instanceof OpName opName && opName.name.equals("sampler")) {
+				opName.name = "_sampler";
+			}
+		}
+	}
+
 	private int allocateId() {
 		return this.bound++;
 	}

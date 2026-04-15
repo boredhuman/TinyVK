@@ -82,11 +82,10 @@ public class VulkanWindow {
 		boolean windowClosing = GLFW.glfwWindowShouldClose(this.window);
 
 		if (!windowClosing) {
-			GLFW.glfwGetWindowSize(this.window, width, height);
+			GLFW.glfwGetFramebufferSize(this.window, width, height);
+			this.width = width.get(0);
+			this.height = height.get(0);
 		}
-
-		this.width = width.get(0);
-		this.height = height.get(0);
 
 		KHRSwapchain.vkDestroySwapchainKHR(device, this.swapChain, null);
 
