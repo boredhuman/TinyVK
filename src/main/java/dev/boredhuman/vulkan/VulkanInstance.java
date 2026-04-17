@@ -248,7 +248,8 @@ public class VulkanInstance {
 			.dynamicRendering(true);
 
 		VkPhysicalDeviceFeatures physicalDeviceFeatures = VkPhysicalDeviceFeatures.calloc(memoryStack)
-			.imageCubeArray(true);
+			.imageCubeArray(true)
+			.logicOp(true);
 
 		VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.calloc(memoryStack)
 			.sType$Default()
