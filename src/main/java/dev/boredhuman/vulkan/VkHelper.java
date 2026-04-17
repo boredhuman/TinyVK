@@ -1,5 +1,6 @@
 package dev.boredhuman.vulkan;
 
+import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.textures.TextureFormat;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK10;
@@ -8,7 +9,6 @@ import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
 
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
-import java.util.concurrent.Callable;
 
 public class VkHelper {
 
@@ -17,6 +17,22 @@ public class VkHelper {
 
 	public static MemoryStack stackPush() {
 		return VkHelper.MAIN_THREAD_MEMORY_STACK.push();
+	}
+
+	public static boolean deviceLocal(int usage) {
+		if ((usage & GpuBuffer.USAGE_VERTEX) != 0) {
+			return true;
+		}
+		if ((usage & GpuBuffer.USAGE_INDEX) != 0) {
+			return true;
+		}
+		if ((usage & GpuBuffer.USAGE_UNIFORM) != 0) {
+			return true;
+		}
+		if ((usage & GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER) != 0) {
+			return true;
+		}
+		return false;
 	}
 
 	public static int getFormat(TextureFormat textureFormat) {
@@ -52,18 +68,4 @@ public class VkHelper {
 
 		return shader;
 	}
-
-	// public static <T> T timed(Callable<T> task, long threshold) {
-	// 	try {
-	// 		long start = System.nanoTime();
-	// 		T call = task.call();
-	// 		long end = System.nanoTime();
-	// 		long dif = end - start;
-	// 		if ()
-	//
-	// 		return call;
-	// 	} catch (Throwable err) {
-	// 		throw new RuntimeException(err);
-	// 	}
-	// }
 }

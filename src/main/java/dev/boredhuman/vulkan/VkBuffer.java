@@ -27,24 +27,39 @@ public class VkBuffer extends GpuBuffer {
 	public final int usage;
 	boolean closed = false;
 
-	public long mappedMemory = 0;
+	private boolean persistent;
+	private long mappedMemory = 0;
 
 	private int srcStage;
 	private int srcAccess;
 
 	public long texelBufferView;
 
-	public VkBuffer(BufferCreationData creationData, long buffer, long vmaAllocation, int usage) {
+	public VkBuffer(BufferCreationData creationData, long buffer, long vmaAllocation, int usage, boolean persistent) {
 		super(creationData.usage(), creationData.size());
 		this.creationData = creationData;
 		this.buffer = buffer;
 		this.vmaAllocation = vmaAllocation;
 		this.usage = usage;
+		this.persistent = persistent;
 
 		this.srcStage = VK10.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 	}
 
-	public VkMappedView map(long offset, int size, boolean write) {
+	public VkMappedView map(long offset, long size, boolean write) {
+		long vmaAllocator = VulkanInstance.getInstance().getVmaAllocator();
+		if ((this.creationData.usage() & GpuBuffer.USAGE_MAP_READ) != 0) {
+			Vma.vmaInvalidateAllocation(vmaAllocator, this.vmaAllocation, 0, VK10.VK_WHOLE_SIZE);
+		}
+		if (!this.persistent) {
+			MemoryStack memoryStack = VkHelper.stackPush();
+			PointerBuffer mappedMemoryHandle = memoryStack.callocPointer(1);
+			if (Vma.vmaMapMemory(vmaAllocator, this.vmaAllocation, mappedMemoryHandle) != VK10.VK_SUCCESS) {
+				throw new RuntimeException();
+			}
+			this.mappedMemory = mappedMemoryHandle.get(0);
+			memoryStack.close();
+		}
 		return new VkMappedView(offset, size, write);
 	}
 
@@ -130,13 +145,22 @@ public class VkBuffer extends GpuBuffer {
 	}
 
 	public class VkMappedView implements MappedView {
+		private final long offset;
+		private final long size;
 		public final boolean write;
 		private final ByteBuffer view;
 		private boolean closed;
 
-		public VkMappedView(long offset, int size, boolean write) {
+		public VkMappedView(long offset, long size, boolean write) {
+			this.offset = offset;
+			this.size = size;
 			this.write = write;
-			this.view = MemoryUtil.memByteBuffer(VkBuffer.this.mappedMemory + offset, size);
+
+			if (size > Integer.MAX_VALUE) {
+				throw new RuntimeException("Allocation bigger than 2G not supported");
+			}
+
+			this.view = MemoryUtil.memByteBuffer(VkBuffer.this.mappedMemory + offset, (int) size);
 		}
 
 		@Override
@@ -148,6 +172,14 @@ public class VkBuffer extends GpuBuffer {
 		public void close() {
 			if (!this.closed) {
 				this.closed = true;
+
+				long vmaAllocator = VulkanInstance.getInstance().getVmaAllocator();
+				if (this.write) {
+					Vma.vmaFlushAllocation(vmaAllocator, VkBuffer.this.vmaAllocation, this.offset, this.size);
+				}
+				if (!VkBuffer.this.persistent) {
+					Vma.vmaUnmapMemory(vmaAllocator, VkBuffer.this.vmaAllocation);
+				}
 			}
 		}
 	}
@@ -160,15 +192,7 @@ public class VkBuffer extends GpuBuffer {
 	public static VkBuffer create(BufferCreationData creationData, boolean hostVisible, boolean deviceLocal) {
 		int bufferUsage = 0;
 
-		boolean mapped = false;
 		int usage = creationData.usage();
-
-		if ((GpuBuffer.USAGE_MAP_READ & usage) != 0) {
-			mapped = true;
-		}
-		if ((GpuBuffer.USAGE_MAP_WRITE & usage) != 0) {
-			mapped = true;
-		}
 
 		if ((GpuBuffer.USAGE_COPY_DST & usage) != 0) {
 			bufferUsage = VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -204,6 +228,7 @@ public class VkBuffer extends GpuBuffer {
 		VmaAllocationCreateInfo allocationCreateInfo = VmaAllocationCreateInfo.calloc(memoryStack);
 		allocationCreateInfo.usage(Vma.VMA_MEMORY_USAGE_AUTO);
 
+		boolean mapped = (GpuBuffer.USAGE_MAP_WRITE & usage) != 0;
 		int baseFlags = mapped ? Vma.VMA_ALLOCATION_CREATE_MAPPED_BIT : 0;
 		if ((creationData.usage() & GpuBuffer.USAGE_MAP_READ) != 0) {
 			allocationCreateInfo.flags(baseFlags | Vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT);
@@ -211,16 +236,13 @@ public class VkBuffer extends GpuBuffer {
 			allocationCreateInfo.flags(baseFlags | Vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 		}
 
-		int requiredFlags = 0;
-
 		if (hostVisible) {
-			requiredFlags = VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			allocationCreateInfo.requiredFlags(VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+			allocationCreateInfo.preferredFlags(VK10.VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 		}
 		if (deviceLocal) {
-			requiredFlags |= VK10.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			allocationCreateInfo.requiredFlags(VK10.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		}
-
-		allocationCreateInfo.requiredFlags(requiredFlags);
 
 		LongBuffer bufferHandle = memoryStack.callocLong(1);
 		PointerBuffer vmaAllocation = memoryStack.callocPointer(1);
@@ -232,7 +254,7 @@ public class VkBuffer extends GpuBuffer {
 
 		long buffer = bufferHandle.get(0);
 
-		VkBuffer vkBufferObj = new VkBuffer(creationData, buffer, vmaAllocation.get(0), bufferUsage);
+		VkBuffer vkBufferObj = new VkBuffer(creationData, buffer, vmaAllocation.get(0), bufferUsage, mapped);
 		vkBufferObj.mappedMemory = allocationInfo.pMappedData();
 
 		if (creationData.label() != null) {

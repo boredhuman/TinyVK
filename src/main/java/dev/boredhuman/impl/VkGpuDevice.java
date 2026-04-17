@@ -10,13 +10,13 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.TextureFormat;
 import dev.boredhuman.vulkan.VkBuffer;
+import dev.boredhuman.vulkan.VkHelper;
 import dev.boredhuman.vulkan.VkImage;
 import dev.boredhuman.vulkan.VkImageView;
 import dev.boredhuman.vulkan.VkSampler;
 import dev.boredhuman.vulkan.VulkanDevice;
 import dev.boredhuman.vulkan.VulkanInstance;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VK10;
 
 import java.nio.ByteBuffer;
@@ -69,21 +69,17 @@ public class VkGpuDevice implements GpuDevice {
 		String label = supplier == null ? null : supplier.get();
 		BufferCreationData creationData = new BufferCreationData(label, usage, size);
 
-		return VkBuffer.create(creationData, false, true);
+		return VkBuffer.create(creationData, false, VkHelper.deviceLocal(usage));
 	}
 
 	@Override
 	public VkBuffer createBuffer(@Nullable Supplier<String> supplier, @GpuBuffer.Usage int usage, ByteBuffer data) {
 		try {
 			String label = supplier == null ? null : supplier.get();
-			BufferCreationData creationData = new BufferCreationData(label, usage | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT, data.remaining());
+			BufferCreationData creationData = new BufferCreationData(label, usage | GpuBuffer.USAGE_COPY_DST, data.remaining());
 
-			VkBuffer buffer = VkBuffer.create(creationData, false, true);
-			if (buffer.mappedMemory != 0) {
-				MemoryUtil.memCopy(MemoryUtil.memAddress(data), buffer.mappedMemory, data.remaining());
-			} else {
-				VulkanDevice.getInstance().getCommandEncoder().writeToBuffer(buffer.slice(), data);
-			}
+			VkBuffer buffer = VkBuffer.create(creationData, false, VkHelper.deviceLocal(usage));
+			VulkanDevice.getInstance().getCommandEncoder().writeToBuffer(buffer.slice(), data);
 			return buffer;
 		} catch (Throwable err) {
 			throw new RuntimeException(err);

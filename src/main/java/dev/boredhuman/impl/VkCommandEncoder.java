@@ -52,7 +52,7 @@ public class VkCommandEncoder implements CommandEncoder {
 
 	@Override
 	public VkRenderPass createRenderPass(Supplier<String> supplier, GpuTextureView colorTexture, OptionalInt clearColor, @Nullable GpuTextureView depthTexture,
-									   OptionalDouble clearDepth) {
+										 OptionalDouble clearDepth) {
 		MemoryStack memoryStack = VkHelper.stackPush();
 
 		VkImageView colorTextureView = (VkImageView) colorTexture;
@@ -92,11 +92,22 @@ public class VkCommandEncoder implements CommandEncoder {
 			VkImageView depthTextureView = (VkImageView) depthTexture;
 			depthVkImage = depthTextureView.vkImage;
 
-			depthAttachmentInfo = VkRenderingAttachmentInfo.calloc(memoryStack).sType$Default().imageView(depthTextureView.imageView)
+			depthAttachmentInfo = VkRenderingAttachmentInfo.calloc(memoryStack)
+				.sType$Default()
+				.imageView(depthTextureView.imageView)
 				.imageLayout(VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-				.loadOp(clearDepth.isPresent() ? VK10.VK_ATTACHMENT_LOAD_OP_CLEAR : VK10.VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK10.VK_ATTACHMENT_STORE_OP_STORE);
+				.loadOp(clearDepth.isPresent() ? VK10.VK_ATTACHMENT_LOAD_OP_CLEAR : VK10.VK_ATTACHMENT_LOAD_OP_LOAD)
+				.storeOp(VK10.VK_ATTACHMENT_STORE_OP_STORE);
 
 			VkClearValue depthClear;
+
+			int accessMask;
+
+			if (clearDepth.isPresent()) {
+				accessMask = VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			} else {
+				accessMask = VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+			}
 
 			if (clearDepth.isPresent()) {
 				depthClear = VkClearValue.calloc(memoryStack);
@@ -106,8 +117,9 @@ public class VkCommandEncoder implements CommandEncoder {
 			}
 
 			depthTextureView.vkImage.transition(
-				VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK10.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-				VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+				VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				VK10.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK10.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+				accessMask
 			);
 
 			renderingInfo.pDepthAttachment(depthAttachmentInfo);
@@ -115,8 +127,15 @@ public class VkCommandEncoder implements CommandEncoder {
 			depthVkImage = null;
 		}
 
+		int accessMask;
+		if (clearColor.isPresent()) {
+			accessMask = VK10.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		} else {
+			accessMask = VK10.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK10.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+		}
+
 		colorTextureView.vkImage.transition(
-			VK10.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK10.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK10.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+			VK10.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK10.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, accessMask
 		);
 
 		VulkanDevice.getInstance().inRenderPass = true;
@@ -248,8 +267,10 @@ public class VkCommandEncoder implements CommandEncoder {
 		VkClearDepthStencilValue clearDepth = VkClearDepthStencilValue.calloc(memoryStack);
 		clearDepth.depth((float) depthClear);
 
-		VkImageSubresourceRange isrr = VkImageSubresourceRange.calloc(memoryStack).aspectMask(VK10.VK_IMAGE_ASPECT_DEPTH_BIT)
-			.levelCount(VK10.VK_REMAINING_MIP_LEVELS).layerCount(VK10.VK_REMAINING_ARRAY_LAYERS);
+		VkImageSubresourceRange isrr = VkImageSubresourceRange.calloc(memoryStack)
+			.aspectMask(VK10.VK_IMAGE_ASPECT_DEPTH_BIT)
+			.levelCount(VK10.VK_REMAINING_MIP_LEVELS)
+			.layerCount(VK10.VK_REMAINING_ARRAY_LAYERS);
 
 		VK10.vkCmdClearDepthStencilImage(commandBuffer, vkImage.image, VK10.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, clearDepth, isrr);
 
@@ -281,7 +302,9 @@ public class VkCommandEncoder implements CommandEncoder {
 
 		VkBuffer tempVkBuffer = VkBuffer.createTempBuffer(data.remaining());
 
-		MemoryUtil.memCopy(MemoryUtil.memAddress(data), tempVkBuffer.mappedMemory, data.remaining());
+		VkBuffer.VkMappedView view = tempVkBuffer.map(gpuBufferSlice.offset(), gpuBufferSlice.length(), true);
+		MemoryUtil.memCopy(data, view.data());
+		view.close();
 
 		tempVkBuffer.sync(VK10.VK_PIPELINE_STAGE_TRANSFER_BIT, VK10.VK_ACCESS_TRANSFER_READ_BIT);
 		vkBuffer.syncForWrite();
@@ -359,8 +382,9 @@ public class VkCommandEncoder implements CommandEncoder {
 		VkCommandBuffer commandBuffer = VulkanDevice.getInstance().getCommandBuffer();
 
 		VkBuffer tempVkBuffer = VkBuffer.createTempBuffer(size);
-
-		MemoryUtil.memCopy(data, tempVkBuffer.mappedMemory, size);
+		VkBuffer.VkMappedView view = tempVkBuffer.map(0, tempVkBuffer.size(), true);
+		MemoryUtil.memCopy(data, MemoryUtil.memAddress(view.data()), size);
+		view.close();
 
 		tempVkBuffer.sync(VK10.VK_PIPELINE_STAGE_TRANSFER_BIT, VK10.VK_ACCESS_TRANSFER_READ_BIT);
 
@@ -412,6 +436,10 @@ public class VkCommandEncoder implements CommandEncoder {
 
 		VK10.vkCmdCopyImageToBuffer(commandBuffer, srcImage.image, VK10.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstBuffer.buffer, copy);
 
+		dstBuffer.sync(VK10.VK_PIPELINE_STAGE_HOST_BIT, VK10.VK_ACCESS_HOST_READ_BIT);
+
+		memoryStack.close();
+
 		srcImage.transition();
 
 		// avoid running the task twice when dual launching
@@ -434,7 +462,7 @@ public class VkCommandEncoder implements CommandEncoder {
 
 		VkImageCopy.Buffer imageCopy = VkImageCopy.calloc(1, memoryStack);
 		imageCopy.srcSubresource().aspectMask(srcImage.imageAspect).mipLevel(mipLevel).layerCount(1);
-		imageCopy.srcSubresource().aspectMask(dstImage.imageAspect).mipLevel(mipLevel).layerCount(1);
+		imageCopy.dstSubresource().aspectMask(dstImage.imageAspect).mipLevel(mipLevel).layerCount(1);
 
 		imageCopy.srcOffset().set(sourceX, sourceY, 0);
 		imageCopy.dstOffset().set(destX, destY, 0);
