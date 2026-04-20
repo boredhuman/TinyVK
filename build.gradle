@@ -54,6 +54,7 @@ dependencies {
         implementation "org.lwjgl:lwjgl-vma::$nativeLib"
     }
     implementation "com.github.boredhuman:JavaSpirv:969d33a396"
+    implementation "org.lwjgl:lwjgl-vulkan::$macosNatives"
 }
 
 loom {
