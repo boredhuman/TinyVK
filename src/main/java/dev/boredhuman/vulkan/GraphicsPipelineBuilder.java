@@ -34,8 +34,6 @@ public class GraphicsPipelineBuilder {
 	private boolean depthTest;
 	private int polygonMode;
 	private int cullMode;
-	private boolean enableLogicOp;
-	private int logicOp;
 	private boolean blend;
 	private int srcColorBlendFactor;
 	private int dstColorBlendFactor;
@@ -91,16 +89,6 @@ public class GraphicsPipelineBuilder {
 
 	public GraphicsPipelineBuilder cullMode(int cullMode) {
 		this.cullMode = cullMode;
-		return this;
-	}
-
-	public GraphicsPipelineBuilder logicOp(boolean logicOp) {
-		this.enableLogicOp = logicOp;
-		return this;
-	}
-
-	public GraphicsPipelineBuilder logicCompareOp(int logicCompareOp) {
-		this.logicOp = logicCompareOp;
 		return this;
 	}
 
@@ -281,8 +269,6 @@ public class GraphicsPipelineBuilder {
 
 		VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = VkPipelineColorBlendStateCreateInfo.calloc(memoryStack)
 			.sType$Default()
-			.logicOpEnable(this.enableLogicOp)
-			.logicOp(this.logicOp)
 			.pAttachments(
 				VkPipelineColorBlendAttachmentState.calloc(1, memoryStack)
 					.blendEnable(this.blend)

@@ -255,8 +255,6 @@ public class PipelineConverter {
 			.depthTest(renderPipeline.getDepthTestFunction() != DepthTestFunction.NO_DEPTH_TEST)
 			.polygonMode(PipelineConverter.polygonMode(renderPipeline.getPolygonMode()))
 			.cullMode(renderPipeline.isCull() ? VK10.VK_CULL_MODE_BACK_BIT : VK10.VK_CULL_MODE_NONE)
-			.logicOp(renderPipeline.getColorLogic() != LogicOp.NONE)
-			.logicCompareOp(PipelineConverter.logicCompareOp(renderPipeline.getColorLogic()))
 			.blend(renderPipeline.getBlendFunction().isPresent())
 			.srcColorBlendFactor(renderPipeline.getBlendFunction().map(e -> PipelineConverter.sourceBlendFactor(e.sourceColor())).orElse(0))
 			.dstColorBlendFactor(renderPipeline.getBlendFunction().map(e -> PipelineConverter.destBlendFactor(e.destColor())).orElse(0))
